@@ -7,7 +7,7 @@ import jwt
 import datetime
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi 
-
+from django.forms.models import model_to_dict
 
 class TaskView(APIView):
     def get(self, request):
@@ -20,7 +20,7 @@ class TaskView(APIView):
         except jwt.ExpiredSignatureError:
             raise AuthenticationFailed('Unauthenticated!')
 
-        tasks = Tasks.objects.filter(username=payload['username']).all()
+        tasks = Tasks.objects.filter(username=payload['username']).values()
         return Response(tasks)
 
     @swagger_auto_schema(
@@ -46,9 +46,8 @@ class TaskView(APIView):
             "taskname": request.data['taskname'],
             "completion": request.data['completion'],
         }
-        print(5*'*', req_data)
         serializer = TaskSerializer(
-            data=request.data
+            data=req_data
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
