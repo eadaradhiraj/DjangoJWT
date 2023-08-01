@@ -1,11 +1,58 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
-from .serializers import UserSerializer
-from .models import User
+from .serializers import UserSerializer, TaskSerializer
+from .models import User, Tasks
 import jwt
 import datetime
 from drf_yasg.utils import swagger_auto_schema
+from drf_yasg import openapi 
+
+
+class TaskView(APIView):
+    def get(self, request):
+        token = request.COOKIES.get('jwt')
+        if not token:
+            raise AuthenticationFailed('Unauthenticated!')
+
+        try:
+            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed('Unauthenticated!')
+
+        tasks = Tasks.objects.filter(username=payload['username']).all()
+        return Response(tasks)
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'taskname': openapi.Schema(type=openapi.TYPE_STRING, description='Add taskname'),
+                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion'),
+            }
+        )
+    )
+    def post(self, request):
+        token = request.COOKIES.get('jwt')
+        if not token:
+            raise AuthenticationFailed('Unauthenticated!')
+
+        try:
+            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+        except jwt.ExpiredSignatureError:
+            raise AuthenticationFailed('Unauthenticated!')
+        req_data = {
+            "username": User.objects.filter(username=payload['username']).first(),
+            "taskname": request.data['taskname'],
+            "completion": request.data['completion'],
+        }
+        print(5*'*', req_data)
+        serializer = TaskSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
 
 # Create your views here.
