@@ -9,17 +9,43 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi 
 from django.forms.models import model_to_dict
 
+def get_payload(request):
+    token = request.COOKIES.get('jwt')
+    if not token:
+        raise AuthenticationFailed('Unauthenticated!')
+
+    try:
+        payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        raise AuthenticationFailed('Unauthenticated!')
+    return payload
+
 class TaskView(APIView):
+    pk = openapi.Parameter('pk', openapi.IN_FORM,
+                             description="field you want to order by to",
+                             type=openapi.TYPE_INTEGER)
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            manual_parameters=[pk],
+            type=openapi.TYPE_OBJECT,
+            properties={
+                # 'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Task ID to edit'),
+                'taskname': openapi.Schema(type=openapi.TYPE_STRING, description='Add taskname'),
+                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion'),
+            }
+        )
+    )
+    def patch(self, request, pk):
+        payload = get_payload(request=request)
+        task = Tasks.objects.filter(id=pk, username=payload['username']).first()
+        serializer = TaskSerializer(task, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)        
+
     def get(self, request):
-        token = request.COOKIES.get('jwt')
-        if not token:
-            raise AuthenticationFailed('Unauthenticated!')
-
-        try:
-            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed('Unauthenticated!')
-
+        payload = get_payload(request=request)
         tasks = Tasks.objects.filter(username=payload['username']).values()
         return Response(tasks)
 
@@ -33,14 +59,7 @@ class TaskView(APIView):
         )
     )
     def post(self, request):
-        token = request.COOKIES.get('jwt')
-        if not token:
-            raise AuthenticationFailed('Unauthenticated!')
-
-        try:
-            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed('Unauthenticated!')
+        payload = get_payload(request=request)
         req_data = {
             "username": User.objects.filter(username=payload['username']).first(),
             "taskname": request.data['taskname'],
