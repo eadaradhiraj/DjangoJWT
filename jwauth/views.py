@@ -3,12 +3,14 @@ from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
 from .serializers import UserSerializer
 from .models import User
-# import jwt, datetime
-import jwt , datetime
+import jwt
+import datetime
+from drf_yasg.utils import swagger_auto_schema
 
 
 # Create your views here.
 class RegisterView(APIView):
+    @swagger_auto_schema(request_body=UserSerializer)
     def post(self, request):
         serializer = UserSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -17,11 +19,12 @@ class RegisterView(APIView):
 
 
 class LoginView(APIView):
+    @swagger_auto_schema(request_body=UserSerializer)
     def post(self, request):
-        email = request.data['email']
+        username = request.data['username']
         password = request.data['password']
 
-        user = User.objects.filter(email=email).first()
+        user = User.objects.filter(username=username).first()
 
         if user is None:
             raise AuthenticationFailed('User not found!')
@@ -30,7 +33,7 @@ class LoginView(APIView):
             raise AuthenticationFailed('Incorrect password!')
 
         payload = {
-            'id': user.id,
+            'username': user.username,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60),
             'iat': datetime.datetime.utcnow()
         }
@@ -47,7 +50,6 @@ class LoginView(APIView):
 
 
 class UserView(APIView):
-
     def get(self, request):
         token = request.COOKIES.get('jwt')
         if not token:
@@ -58,9 +60,9 @@ class UserView(APIView):
         except jwt.ExpiredSignatureError:
             raise AuthenticationFailed('Unauthenticated!')
 
-        user = User.objects.filter(id=payload['id']).first()
+        user = User.objects.filter(username=payload['username']).first()
         serializer = UserSerializer(user)
-        return Response(serializer.data['name'])
+        return Response(serializer.data['username'])
 
 
 class LogoutView(APIView):
