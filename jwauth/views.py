@@ -1,7 +1,8 @@
 from rest_framework.views import APIView
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.exceptions import AuthenticationFailed
-from .serializers import UserSerializer, TaskSerializer
+from .serializers import UserSerializer, TaskSerializer, TaskPostSerializer
 from .models import User, Tasks
 import jwt
 import datetime
@@ -20,35 +21,12 @@ def get_payload(request):
         raise AuthenticationFailed('Unauthenticated!')
     return payload
 
-class TaskView(APIView):
-    pk = openapi.Parameter('pk', openapi.IN_FORM,
-                             description="field you want to order by to",
-                             type=openapi.TYPE_INTEGER)
-    @swagger_auto_schema(
-        request_body=openapi.Schema(
-            manual_parameters=[pk],
-            type=openapi.TYPE_OBJECT,
-            properties={
-                # 'id': openapi.Schema(type=openapi.TYPE_INTEGER, description='Task ID to edit'),
-                'taskname': openapi.Schema(type=openapi.TYPE_STRING, description='Add taskname'),
-                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion'),
-            }
-        )
-    )
-    def patch(self, request, pk):
-        payload = get_payload(request=request)
-        task = Tasks.objects.filter(id=pk, username=payload['username']).first()
-        serializer = TaskSerializer(task, data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)        
-
+class TaskPostView(APIView):
+    @swagger_auto_schema()       
     def get(self, request):
         payload = get_payload(request=request)
         tasks = Tasks.objects.filter(username=payload['username']).values()
         return Response(tasks)
-
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
@@ -65,12 +43,37 @@ class TaskView(APIView):
             "taskname": request.data['taskname'],
             "completion": request.data['completion'],
         }
-        serializer = TaskSerializer(
+        serializer = TaskPostSerializer(
             data=req_data
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+class TaskView(APIView):
+    @swagger_auto_schema()       
+    def get(self, request, pk):
+        payload = get_payload(request=request)
+        tasks = Tasks.objects.filter(id=pk).values()
+        return Response(tasks)
+
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'taskname': openapi.Schema(type=openapi.TYPE_STRING, description='Add taskname'),
+                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion'),
+            }
+        )
+    )
+    def patch(self, request, pk):
+        payload = get_payload(request=request)
+        task = Tasks.objects.filter(id=pk, username=payload['username']).first()
+        serializer = TaskSerializer(task, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Create your views here.

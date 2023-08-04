@@ -5,8 +5,12 @@ from .models import User, Tasks
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tasks
-        fields = ['taskname', 'completion', 'username']
-        
+        fields = ['taskname', 'completion']
+
+class TaskPostSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tasks
+        fields = ['username', 'taskname', 'completion']
 
 
 class UserSerializer(serializers.ModelSerializer):
