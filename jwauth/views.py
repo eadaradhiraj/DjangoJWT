@@ -75,6 +75,16 @@ class TaskView(APIView):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    @swagger_auto_schema()
+    def delete(self, request, pk):
+        payload = get_payload(request=request)
+        try:
+            task = Tasks.objects.get(id=pk, username=payload['username'])
+            task.delete()
+            return Response(status=status.HTTP_200_OK)
+        except:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+
 
 # Create your views here.
 class RegisterView(APIView):
