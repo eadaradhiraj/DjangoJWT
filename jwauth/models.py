@@ -3,11 +3,11 @@ from django.contrib.auth.models import AbstractUser
 
 # Create your models here.
 class User(AbstractUser):
-    username=models.CharField(max_length=255,unique=True, primary_key=True)
+    email=models.CharField(max_length=255, unique=True)
     password=models.CharField(max_length=255)
-    # email=models.CharField(max_length=255)
+    is_verified = models.BooleanField(default=False)
 
-    USERNAME_FIELD='username'
+    USERNAME_FIELD='email'
     REQUIRED_FIELDS=[]
 
 class Tasks(models.Model):
