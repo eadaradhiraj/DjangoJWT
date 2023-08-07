@@ -10,7 +10,8 @@ from .serializers import (
     TaskSerializer,
     TaskPostSerializer,
     ResetPasswordRequestSerializer,
-    SetNewPasswordSerializer
+    SetNewPasswordSerializer,
+    SetNewPasswordKnownSerializer
 )
 from .models import User, Tasks
 import jwt
@@ -94,7 +95,7 @@ class TaskView(APIView):
         serializer = TaskSerializer(task, data=request.data)
         if serializer.is_valid():
             serializer.save()
-            return Response(serializer.data)
+            return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema()
@@ -159,7 +160,8 @@ class RequestPasswordReset(generics.GenericAPIView):
             # data = {'email_body': email_body, 'to_email': user.email,
             #         'email_subject': 'Reset your passsword'}
             # Util.send_email(data)
-        return Response({'uidb64': uidb64, 'token': token}, status=status.HTTP_200_OK)
+            return Response({'uidb64': uidb64, 'token': token}, status=status.HTTP_200_OK)
+        return Response({'msg': "User not found"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
 # class PasswordTokenCheckAPI(generics.GenericAPIView):
@@ -186,14 +188,6 @@ class RequestPasswordReset(generics.GenericAPIView):
 #             except UnboundLocalError as e:
 #                 return Response({'error': 'Token is not valid, please request a new one'}, status=status.HTTP_400_BAD_REQUEST)
 
-
-class SetNewPasswordAPIView(generics.GenericAPIView):
-    serializer_class = SetNewPasswordSerializer
-    @swagger_auto_schema(request_body=SetNewPasswordSerializer)
-    def patch(self, request):
-        serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response({'success': True, 'message': 'Password reset success'}, status=status.HTTP_200_OK)
 
 class SetNewPasswordAPIView(generics.GenericAPIView):
     serializer_class = SetNewPasswordSerializer
@@ -259,26 +253,26 @@ class LoginView(APIView):
 
 class UserView(APIView):
     def get(self, request):
-        token = request.COOKIES.get('jwt')
-        if not token:
-            raise AuthenticationFailed('Unauthenticated!')
-
-        try:
-            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
-        except jwt.ExpiredSignatureError:
-            raise AuthenticationFailed('Unauthenticated!')
-
+        payload = get_payload(request=request)
         user = User.objects.filter(email=payload['username']).first()
         serializer = UserSerializer(user)
         return Response(serializer.data)
 
-class SetNewPasswordAPIView(generics.GenericAPIView):
-    serializer_class = SetNewPasswordSerializer
-
+class SetNewPasswordKnownAPIView(generics.GenericAPIView):
+    serializer_class = SetNewPasswordKnownSerializer
     def patch(self, request):
+        payload = get_payload(request=request)
+        user = User.objects.filter(email=payload['username']).first()
+        if request.data.get("new_password")!=request.data.get("new_password_again"):
+            return Response("New password not matching!", status=status.HTTP_400_BAD_REQUEST)
+        if not user.check_password(request.data.get("old_password")):
+            return Response("Old password wrong!", status=status.HTTP_400_BAD_REQUEST)
         serializer = self.serializer_class(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        return Response({'success': True, 'message': 'Password reset success'}, status=status.HTTP_200_OK)
+        if serializer.is_valid():
+            user.set_password(request.data.get("new_password"))
+            user.save()
+            return Response("Password changed successfully", status=status.HTTP_200_OK)
+        # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutView(APIView):
