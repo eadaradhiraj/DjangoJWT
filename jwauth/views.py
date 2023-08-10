@@ -1,6 +1,5 @@
 from rest_framework.views import APIView
-from rest_framework import generics
-from rest_framework import status
+from rest_framework import authentication, permissions, generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.exceptions import AuthenticationFailed
@@ -45,6 +44,8 @@ def get_payload(request):
     return payload
 
 class TaskPostView(APIView):
+    authentication_classes = (authentication.TokenAuthentication,)
+    permission_classes = (permissions.IsAuthenticated,)
     @swagger_auto_schema()       
     def get(self, request):
         payload = get_payload(request=request)
@@ -159,7 +160,6 @@ class RequestPasswordReset(generics.GenericAPIView):
             #     absurl+"?redirect_url="+redirect_url
             # data = {'email_body': email_body, 'to_email': user.email,
             #         'email_subject': 'Reset your passsword'}
-            # Util.send_email(data)
             return Response({'uidb64': uidb64, 'token': token}, status=status.HTTP_200_OK)
         return Response({'msg': "User not found"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 

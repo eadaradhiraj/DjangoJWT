@@ -22,7 +22,7 @@ urlpatterns = [
     path('user/', UserView.as_view()),
     path('logout/', LogoutView.as_view()),
     path('task/<int:pk>', TaskView.as_view()),
-    path('task', TaskPostView.as_view()),
+    path('task', TaskPostView.as_view(), name="task"),
     path('email-verify/', VerifyEmail.as_view(), name="email-verify"),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('request-reset-email/', RequestPasswordReset.as_view(),
