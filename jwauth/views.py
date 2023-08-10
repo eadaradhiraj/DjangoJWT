@@ -1,7 +1,7 @@
 from rest_framework.views import APIView
-from rest_framework import authentication, permissions, generics, status
+from rest_framework import generics, status
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework.exceptions import AuthenticationFailed
 from .serializers import ( 
     UserSerializer,
@@ -26,44 +26,43 @@ from django.urls import reverse
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi 
 from django.forms.models import model_to_dict
-from .utils import Util
 
 class CustomRedirect(HttpResponsePermanentRedirect):
     allowed_schemes = ['http', 'https']
 
-
 def get_payload(request):
-    token = request.COOKIES.get('jwt')
+    token = request.META.get('HTTP_AUTHORIZATION')
     if not token:
         raise AuthenticationFailed('Unauthenticated!')
-
     try:
         payload = jwt.decode(token, 'secret', algorithms=['HS256'])
     except jwt.ExpiredSignatureError:
         raise AuthenticationFailed('Unauthenticated!')
     return payload
 
+def get_user_obj(request):
+    return User.objects.get(
+        email=get_payload(request).get('username')
+    ).id
+
 class TaskPostView(APIView):
-    authentication_classes = (authentication.TokenAuthentication,)
-    permission_classes = (permissions.IsAuthenticated,)
     @swagger_auto_schema()       
     def get(self, request):
-        payload = get_payload(request=request)
-        tasks = Tasks.objects.filter(username=payload['email']).values()
+        user_obj = get_user_obj(request)
+        tasks = Tasks.objects.filter(username=user_obj).values()
         return Response(tasks)
     @swagger_auto_schema(
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'taskname': openapi.Schema(type=openapi.TYPE_STRING, description='Add taskname'),
-                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion'),
+                'completion': openapi.Schema(type=openapi.TYPE_BOOLEAN, description='completion', default=False),
             }
         )
     )
     def post(self, request):
-        payload = get_payload(request=request)
         req_data = {
-            "username": User.objects.filter(username=payload['email']).first(),
+            "username": get_user_obj(request),
             "taskname": request.data['taskname'],
             "completion": request.data['completion'],
         }
@@ -91,8 +90,7 @@ class TaskView(APIView):
         )
     )
     def patch(self, request, pk):
-        payload = get_payload(request=request)
-        task = Tasks.objects.filter(id=pk, username=payload['username']).first()
+        task = Tasks.objects.filter(id=pk, username=get_user_obj(request)).first()
         serializer = TaskSerializer(task, data=request.data)
         if serializer.is_valid():
             serializer.save()
@@ -103,7 +101,7 @@ class TaskView(APIView):
     def delete(self, request, pk):
         payload = get_payload(request=request)
         try:
-            task = Tasks.objects.get(id=pk, username=payload['username'])
+            task = Tasks.objects.get(id=pk, username=get_user_obj(request))
             task.delete()
             return Response(status=status.HTTP_200_OK)
         except:
@@ -128,8 +126,7 @@ class RegisterView(APIView):
         data = {'email_body': email_body, 'to_email': user.email,
                 'email_subject': 'Verify your email'}
 
-        Util.send_email(data)
-        return Response(user_data, status=status.HTTP_201_CREATED)
+        return Response(data, status=status.HTTP_201_CREATED)
 
 class RequestPasswordReset(generics.GenericAPIView):
     serializer_class = ResetPasswordRequestSerializer
@@ -272,7 +269,7 @@ class SetNewPasswordKnownAPIView(generics.GenericAPIView):
             user.set_password(request.data.get("new_password"))
             user.save()
             return Response("Password changed successfully", status=status.HTTP_200_OK)
-        # return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LogoutView(APIView):

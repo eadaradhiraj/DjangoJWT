@@ -24,20 +24,20 @@ class TaskPostSerializer(serializers.ModelSerializer):
 
 class SetNewPasswordKnownSerializer(serializers.Serializer):
     old_password = serializers.CharField(
-        min_length=6, max_length=68, write_only=True
+        write_only=True
     )
     new_password = serializers.CharField(
-        min_length=6, max_length=68, write_only=True
+        write_only=True
     )
     new_password_again = serializers.CharField(
-        min_length=6, max_length=68, write_only=True
+        write_only=True
     )
     class Meta:
         fields = ['old_password', 'new_password', 'new_password_again']
 
 class SetNewPasswordSerializer(serializers.Serializer):
     password = serializers.CharField(
-        min_length=6, max_length=68, write_only=True)
+        write_only=True)
     token = serializers.CharField(
         min_length=1, write_only=True)
     uidb64 = serializers.CharField(
