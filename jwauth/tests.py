@@ -3,7 +3,6 @@ from rest_framework import status
 from django.test import TestCase
 from django.urls import reverse
 from .models import User
-from django.core import mail
 from django.test.utils import override_settings
 from http.cookies import SimpleCookie
 from rest_framework.test import APITestCase
@@ -21,8 +20,6 @@ class UserLoginTestCase(TestCase):
         resp = self.client.post(url, {'email':'user@foo.com', 'password':'pass'}, format='json')
         self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
         self.assertTrue('token' not in resp.data)
-
-        # print(mail.outbox)
 
         # verification_url = reverse('email-verify')
         # resp = self.client.post(verification_url, {'token': token}, format='json')
