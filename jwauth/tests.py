@@ -17,19 +17,22 @@ class UserLoginTestCase(TestCase):
         # unit test
         # Corroborate the expected scenario
         url = reverse('register')
-        resp = self.client.post(url, {'email':'user@foo.com', 'password':'pass'}, format='json')
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
-        self.assertTrue('token' not in resp.data)
-
-        # verification_url = reverse('email-verify')
-        # resp = self.client.post(verification_url, {'token': token}, format='json')
-        # self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        reg_resp = self.client.post(url, {'username':'user@foo.com', 'password':'pass'}, format='json')
+        auth_headers = {
+            'HTTP_AUTHORIZATION': reg_resp.data.get("token"),
+        }
+        self.assertEqual(reg_resp.status_code, status.HTTP_201_CREATED)
+        self.assertTrue('email_body' in reg_resp.data)
+        verification_url = reverse('email-verify')
+        ver_resp = self.client.get(verification_url, headers=auth_headers, format='json')
+        print(ver_resp.data)
+        self.assertEqual(ver_resp.status_code, status.HTTP_200_OK)
 
         # resp = self.client.post(verification_url, {'token': 'abc'}, format='json')
         # self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
 
         reset_url = reverse('request-reset-email')
-        resp_reset = self.client.post(reset_url, {'email':'user@foo.com'}, format='json')
+        resp_reset = self.client.post(reset_url, {'username':'user@foo.com'}, format='json')
         self.assertEqual(resp_reset.status_code, status.HTTP_200_OK)
         reset_url = reverse('password-reset-complete')
         resp = self.client.patch(

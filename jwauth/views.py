@@ -25,7 +25,9 @@ import datetime
 from django.urls import reverse
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi 
-from django.forms.models import model_to_dict
+from rest_framework import permissions
+from rest_framework.decorators import permission_classes
+
 
 class CustomRedirect(HttpResponsePermanentRedirect):
     allowed_schemes = ['http', 'https']
@@ -42,7 +44,7 @@ def get_payload(request):
 
 def get_user_obj(request):
     return User.objects.get(
-        email=get_payload(request).get('username')
+        username=get_payload(request).get('username')
     ).id
 
 class TaskPostView(APIView):
@@ -116,15 +118,13 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         user_data = serializer.data
-        user = User.objects.get(email=user_data['email'])
+        user = User.objects.get(username=user_data['username'])
+        print(5*'*', user)
         token = RefreshToken.for_user(user).access_token
         current_site = get_current_site(request).domain
         relativeLink = reverse('email-verify')
         absurl = 'http://'+current_site+relativeLink+"?token="+str(token)
-        email_body = 'Hi '+user.email + \
-            ' Use the link below to verify your email \n' + absurl
-        data = {'email_body': email_body, 'to_email': user.email,
-                'email_subject': 'Verify your email'}
+        data = {'email_body': absurl, 'token':str(token)}
 
         return Response(data, status=status.HTTP_201_CREATED)
 
@@ -143,8 +143,8 @@ class RequestPasswordReset(generics.GenericAPIView):
 
         email = request.data.get('email', '')
 
-        if User.objects.filter(email=email).exists():
-            user = User.objects.get(email=email)
+        if User.objects.filter(username=email).exists():
+            user = User.objects.get(username=email)
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
             token = PasswordResetTokenGenerator().make_token(user)
             current_site = get_current_site(
@@ -161,31 +161,6 @@ class RequestPasswordReset(generics.GenericAPIView):
         return Response({'msg': "User not found"}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
 
 
-# class PasswordTokenCheckAPI(generics.GenericAPIView):
-#     serializer_class = SetNewPasswordSerializer
-#     @swagger_auto_schema(request_body=SetNewPasswordSerializer)
-#     def get(self, request, uidb64, token):
-#         redirect_url = request.GET.get('redirect_url')
-#         try:
-#             id = smart_str(urlsafe_base64_decode(uidb64))
-#             user = User.objects.get(id=id)
-#             if not PasswordResetTokenGenerator().check_token(user, token):
-#                 if len(redirect_url) > 3:
-#                     return CustomRedirect(redirect_url+'?token_valid=False')
-#                 else:
-#                     return CustomRedirect(os.environ.get('FRONTEND_URL', '')+'?token_valid=False')
-#             if redirect_url and len(redirect_url) > 3:
-#                 return CustomRedirect(redirect_url+'?token_valid=True&message=Credentials Valid&uidb64='+uidb64+'&token='+token)
-#             else:
-#                 return CustomRedirect(os.environ.get('FRONTEND_URL', '')+'?token_valid=False')
-#         except DjangoUnicodeDecodeError as identifier:
-#             try:
-#                 if not PasswordResetTokenGenerator().check_token(user):
-#                     return CustomRedirect(redirect_url+'?token_valid=False')
-#             except UnboundLocalError as e:
-#                 return Response({'error': 'Token is not valid, please request a new one'}, status=status.HTTP_400_BAD_REQUEST)
-
-
 class SetNewPasswordAPIView(generics.GenericAPIView):
     serializer_class = SetNewPasswordSerializer
 
@@ -197,15 +172,18 @@ class SetNewPasswordAPIView(generics.GenericAPIView):
 
 class VerifyEmail(APIView):
     serializer_class = EmailVerificationSerializer
-
     token_param_config = openapi.Parameter(
-        'token', in_=openapi.IN_QUERY, description='Description', type=openapi.TYPE_STRING)
-
+        'token',
+        in_=openapi.IN_QUERY,
+        description='Description',
+        type=openapi.TYPE_STRING
+    )
+    @permission_classes([permissions.AllowAny])
     @swagger_auto_schema(manual_parameters=[token_param_config])
     def get(self, request):
         token = request.GET.get('token')
         try:
-            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+            payload = get_payload(request)
             user = User.objects.get(id=payload['user_id'])
             if not user.is_verified:
                 user.is_verified = True
@@ -223,7 +201,7 @@ class LoginView(APIView):
         username = request.data['email']
         password = request.data['password']
 
-        user = User.objects.filter(email=username).first()
+        user = User.objects.filter(username=username).first()
 
         if user is None:
             raise AuthenticationFailed('User not found!')
@@ -251,7 +229,7 @@ class LoginView(APIView):
 class UserView(APIView):
     def get(self, request):
         payload = get_payload(request=request)
-        user = User.objects.filter(email=payload['username']).first()
+        user = User.objects.filter(username=payload['username']).first()
         serializer = UserSerializer(user)
         return Response(serializer.data)
 
@@ -259,7 +237,7 @@ class SetNewPasswordKnownAPIView(generics.GenericAPIView):
     serializer_class = SetNewPasswordKnownSerializer
     def patch(self, request):
         payload = get_payload(request=request)
-        user = User.objects.filter(email=payload['username']).first()
+        user = User.objects.filter(username=payload['username']).first()
         if request.data.get("new_password")!=request.data.get("new_password_again"):
             return Response("New password not matching!", status=status.HTTP_400_BAD_REQUEST)
         if not user.check_password(request.data.get("old_password")):
