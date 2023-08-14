@@ -37,9 +37,10 @@ def get_payload(request):
     if not token:
         raise AuthenticationFailed('Unauthenticated!')
     try:
-        payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+        payload = jwt.decode(token, 'secret', options={"verify_signature": False}, algorithms=['HS512'])
     except jwt.ExpiredSignatureError:
         raise AuthenticationFailed('Unauthenticated!')
+    print(request.META)
     return payload
 
 def get_user_obj(request):
@@ -140,9 +141,7 @@ class RequestPasswordReset(generics.GenericAPIView):
     )
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
-
         email = request.data.get('email', '')
-
         if User.objects.filter(username=email).exists():
             user = User.objects.get(username=email)
             uidb64 = urlsafe_base64_encode(smart_bytes(user.id))
@@ -183,8 +182,7 @@ class VerifyEmail(APIView):
     def get(self, request):
         token = request.GET.get('token')
         try:
-            payload = get_payload(request)
-            user = User.objects.get(id=payload['user_id'])
+            user = get_user_obj(request)
             if not user.is_verified:
                 user.is_verified = True
                 user.save()
@@ -235,6 +233,16 @@ class UserView(APIView):
 
 class SetNewPasswordKnownAPIView(generics.GenericAPIView):
     serializer_class = SetNewPasswordKnownSerializer
+    @swagger_auto_schema(
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'old_password': openapi.Schema(type=openapi.TYPE_STRING, description='Add old_password'),
+                'new_password': openapi.Schema(type=openapi.TYPE_STRING, description='Add new_password_again'),
+                'new_password_again': openapi.Schema(type=openapi.TYPE_STRING, description='Add new_password_again'),                                
+            }
+        )
+    )
     def patch(self, request):
         payload = get_payload(request=request)
         user = User.objects.filter(username=payload['username']).first()
