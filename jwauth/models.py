@@ -11,6 +11,6 @@ class User(AbstractUser):
     REQUIRED_FIELDS=[]
 
 class Tasks(models.Model):
-    taskname=models.CharField(max_length=10)
+    taskname=models.CharField(max_length=100)
     completion=models.BooleanField(default=False)
     username = models.ForeignKey(User, on_delete=models.CASCADE)

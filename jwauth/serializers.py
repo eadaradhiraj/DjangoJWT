@@ -15,7 +15,7 @@ class EmailVerificationSerializer(serializers.ModelSerializer):
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tasks
-        fields = ['taskname', 'completion']
+        fields = ['username', 'taskname', 'completion']
 
 class TaskPostSerializer(serializers.ModelSerializer):
     class Meta:

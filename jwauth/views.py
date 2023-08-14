@@ -37,16 +37,15 @@ def get_payload(request):
     if not token:
         raise AuthenticationFailed('Unauthenticated!')
     try:
-        payload = jwt.decode(token, 'secret', options={"verify_signature": False}, algorithms=['HS512'])
+        payload = jwt.decode(token, 'secret', algorithms=['HS256'])
     except jwt.ExpiredSignatureError:
         raise AuthenticationFailed('Unauthenticated!')
-    print(request.META)
     return payload
 
 def get_user_obj(request):
     return User.objects.get(
         username=get_payload(request).get('username')
-    ).id
+    )
 
 class TaskPostView(APIView):
     @swagger_auto_schema()       
@@ -65,7 +64,7 @@ class TaskPostView(APIView):
     )
     def post(self, request):
         req_data = {
-            "username": get_user_obj(request),
+            "username": get_user_obj(request).id,
             "taskname": request.data['taskname'],
             "completion": request.data['completion'],
         }
@@ -74,14 +73,14 @@ class TaskPostView(APIView):
         )
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class TaskView(APIView):
     @swagger_auto_schema()       
     def get(self, request, pk):
         payload = get_payload(request=request)
         tasks = Tasks.objects.filter(id=pk).values()
-        return Response(tasks)
+        return Response(tasks, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         request_body=openapi.Schema(
@@ -93,8 +92,12 @@ class TaskView(APIView):
         )
     )
     def patch(self, request, pk):
-        task = Tasks.objects.filter(id=pk, username=get_user_obj(request)).first()
-        serializer = TaskSerializer(task, data=request.data)
+        task = Tasks.objects.get(id=pk)
+        serializer = TaskSerializer(
+            task,
+            data=request.data | {'username':get_user_obj(request).id},
+            partial=True
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -120,7 +123,6 @@ class RegisterView(APIView):
         serializer.save()
         user_data = serializer.data
         user = User.objects.get(username=user_data['username'])
-        print(5*'*', user)
         token = RefreshToken.for_user(user).access_token
         current_site = get_current_site(request).domain
         relativeLink = reverse('email-verify')
@@ -208,7 +210,7 @@ class LoginView(APIView):
             raise AuthenticationFailed('Incorrect password!')
 
         payload = {
-            'username': user.email,
+            'username': user.username,
             'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=60),
             'iat': datetime.datetime.utcnow()
         }
@@ -244,8 +246,7 @@ class SetNewPasswordKnownAPIView(generics.GenericAPIView):
         )
     )
     def patch(self, request):
-        payload = get_payload(request=request)
-        user = User.objects.filter(username=payload['username']).first()
+        user = get_user_obj(request=request)
         if request.data.get("new_password")!=request.data.get("new_password_again"):
             return Response("New password not matching!", status=status.HTTP_400_BAD_REQUEST)
         if not user.check_password(request.data.get("old_password")):

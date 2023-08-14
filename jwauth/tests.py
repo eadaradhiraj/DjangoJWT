@@ -51,13 +51,12 @@ class UserLoginTestCase(APITestCase):
         # auth_headers = {
         #     'HTTP_AUTHORIZATION': resp_login.data.get("token"),
         # }
-        print(resp_login.data)
         self.client.credentials(HTTP_AUTHORIZATION = resp_login.data.get("jwt"))
         self.assertEqual(resp_login.status_code, status.HTTP_200_OK)
         reset_known_url = reverse('password-reset-known')
         resp_reset_known = self.client.patch(
             reset_known_url,
-            headers=auth_headers,
+            # headers=auth_headers,
             data={
                 "old_password": "pass1234",
                 "new_password": "pass12345",
@@ -69,17 +68,37 @@ class UserLoginTestCase(APITestCase):
         resp_login = self.client.post(login_url, {'email':'user@foo.com', 'password':'pass1234'}, format='json')
         self.assertEqual(resp_login.status_code, status.HTTP_403_FORBIDDEN)
         resp_login = self.client.post(login_url, {'email':'user@foo.com', 'password':'pass12345'}, format='json')
-        print(resp_login.client.get_cookie("jwt"))
-        # self.client.cookies = SimpleCookie()
         self.assertEqual(resp_login.status_code, status.HTTP_200_OK)
-        # self.client.credentials(HTTP_AUTHORIZATION='JWT ' + resp_login.data.get("jwt"))
         task_post_url = reverse('task')
-        task_post_status = self.client.post(
-            task_post_url,
-            {
-                "taskname": "task1", "completion": False, 'email':'user@foo.com'
+        for i in range(1,3):
+            task_post_status = self.client.post(
+                task_post_url,
+                {
+                    "taskname": f"task{i}", "completion": False
+                },
+                format='json'
+            )
+        self.assertEqual(task_post_status.status_code, status.HTTP_201_CREATED)
+        task_post_status = self.client.get(task_post_url)
+        self.assertEqual(len(task_post_status.data), 2)
+        task_patch_status = self.client.patch(
+            '/api/task/1',
+            data = {
+                "taskname": "finishedtask1", "completion": True,
             },
             format='json'
         )
-        print(task_post_status.data)
-        
+        self.assertEqual(task_patch_status.status_code, status.HTTP_200_OK)
+        task_post_status = self.client.get(task_post_url)
+        self.assertEqual(
+            task_post_status.data[0],
+            {
+                'id': 1,
+                'taskname': 'finishedtask1',
+                'completion': True,
+                'username_id': 1
+            }
+        )
+        task_delete_status = self.client.delete('/api/task/1')
+        task_post_status = self.client.get(task_post_url)
+        self.assertEqual(task_post_status.data[0].get('id'), 2)
