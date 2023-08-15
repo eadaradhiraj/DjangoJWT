@@ -1,11 +1,11 @@
-from rest_framework.views import APIView
+from rest_framework.views import APIView, View
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework.exceptions import AuthenticationFailed
 from .serializers import ( 
     UserSerializer,
-    EmailVerificationSerializer,
+    # EmailVerificationSerializer,
     TaskSerializer,
     TaskPostSerializer,
     ResetPasswordRequestSerializer,
@@ -16,8 +16,16 @@ from .models import User, Tasks
 import jwt
 import os
 from django.http import HttpResponsePermanentRedirect
+from django.contrib.auth import get_user_model
+
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.utils.encoding import smart_str, force_str, smart_bytes, DjangoUnicodeDecodeError
+from django.utils.encoding import (
+    smart_str,
+    force_str,
+    smart_bytes,
+    DjangoUnicodeDecodeError,
+    force_bytes
+)
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.conf import settings
 from django.contrib.sites.shortcuts import get_current_site
@@ -32,8 +40,8 @@ from rest_framework.decorators import permission_classes
 class CustomRedirect(HttpResponsePermanentRedirect):
     allowed_schemes = ['http', 'https']
 
-def get_payload(request):
-    token = request.META.get('HTTP_AUTHORIZATION')
+def get_payload_from_token(token):
+    # token = request.META.get('HTTP_AUTHORIZATION')
     if not token:
         raise AuthenticationFailed('Unauthenticated!')
     try:
@@ -44,7 +52,9 @@ def get_payload(request):
 
 def get_user_obj(request):
     return User.objects.get(
-        username=get_payload(request).get('username')
+        username=get_payload_from_token(
+            request.META.get('HTTP_AUTHORIZATION')
+        ).get('username')
     )
 
 class TaskPostView(APIView):
@@ -78,8 +88,10 @@ class TaskPostView(APIView):
 class TaskView(APIView):
     @swagger_auto_schema()       
     def get(self, request, pk):
-        payload = get_payload(request=request)
-        tasks = Tasks.objects.filter(id=pk).values()
+        tasks = Tasks.objects.filter(
+            id=pk,
+            username=get_user_obj(request)
+        ).values()
         return Response(tasks, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -105,7 +117,6 @@ class TaskView(APIView):
 
     @swagger_auto_schema()
     def delete(self, request, pk):
-        payload = get_payload(request=request)
         try:
             task = Tasks.objects.get(id=pk, username=get_user_obj(request))
             task.delete()
@@ -113,6 +124,14 @@ class TaskView(APIView):
         except:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
+class EmailVerificationTokenGenerator(PasswordResetTokenGenerator):
+    def _make_hash_value(self, user, timestamp):
+        return (
+                str(user.is_active) + str(user.pk) + str(timestamp)
+        )
+
+
+email_verification_token = EmailVerificationTokenGenerator()
 
 # Create your views here.
 class RegisterView(APIView):
@@ -125,10 +144,14 @@ class RegisterView(APIView):
         user = User.objects.get(username=user_data['username'])
         token = RefreshToken.for_user(user).access_token
         current_site = get_current_site(request).domain
-        relativeLink = reverse('email-verify')
-        absurl = 'http://'+current_site+relativeLink+"?token="+str(token)
-        data = {'email_body': absurl, 'token':str(token)}
-
+        # relativeLink = reverse('email-verify')
+        # absurl = 'http://'+current_site+relativeLink+"?token="+str(token)
+        # data = {'token':str(token), 'current_site':current_site}
+        data = {
+            'domain': current_site,
+            'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+            'token': email_verification_token.make_token(user),
+        }
         return Response(data, status=status.HTTP_201_CREATED)
 
 class RequestPasswordReset(generics.GenericAPIView):
@@ -170,30 +193,28 @@ class SetNewPasswordAPIView(generics.GenericAPIView):
         serializer.is_valid(raise_exception=True)
         return Response({'success': True, 'message': 'Password reset success'}, status=status.HTTP_200_OK)
 
-
 class VerifyEmail(APIView):
-    serializer_class = EmailVerificationSerializer
-    token_param_config = openapi.Parameter(
-        'token',
-        in_=openapi.IN_QUERY,
-        description='Description',
-        type=openapi.TYPE_STRING
-    )
-    @permission_classes([permissions.AllowAny])
-    @swagger_auto_schema(manual_parameters=[token_param_config])
-    def get(self, request):
-        token = request.GET.get('token')
+    def get_user_from_email_verification(self, uidb64:str, token: str):
         try:
-            user = get_user_obj(request)
-            if not user.is_verified:
-                user.is_verified = True
-                user.save()
-            return Response({'email': 'Successfully activated'}, status=status.HTTP_200_OK)
-        except jwt.ExpiredSignatureError as identifier:
-            return Response({'error': 'Activation Expired'}, status=status.HTTP_400_BAD_REQUEST)
-        except jwt.exceptions.DecodeError as identifier:
-            return Response({'error': 'Invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = get_user_model().objects.get(pk=uid)
+        except:
+            raise AuthenticationFailed('Incorrect token!')
 
+        if user is not None \
+                and \
+                email_verification_token.check_token(user, token):
+            return user
+        raise AuthenticationFailed("User Not Found!")
+    @swagger_auto_schema()
+    def get(self, request, uidb64, token):
+        user = self.get_user_from_email_verification(uidb64, token)
+        user.is_verified = True
+        user.save()
+        return Response(
+            {'success':True},
+            status=status.HTTP_200_OK
+        )
 
 class LoginView(APIView):
     @swagger_auto_schema(request_body=UserSerializer)
@@ -228,8 +249,7 @@ class LoginView(APIView):
 
 class UserView(APIView):
     def get(self, request):
-        payload = get_payload(request=request)
-        user = User.objects.filter(username=payload['username']).first()
+        user = get_user_obj(request)
         serializer = UserSerializer(user)
         return Response(serializer.data)
 

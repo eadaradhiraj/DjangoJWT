@@ -17,18 +17,19 @@ class UserLoginTestCase(APITestCase):
         # Corroborate the expected scenario
         url = reverse('register')
         reg_resp = self.client.post(url, {'username':'user@foo.com', 'password':'pass'}, format='json')
-        auth_headers = {
-            'HTTP_AUTHORIZATION': reg_resp.data.get("token"),
-        }
+        self.assertFalse(User.objects.get(username='user@foo.com').is_verified)
         self.assertEqual(reg_resp.status_code, status.HTTP_201_CREATED)
-        self.assertTrue('email_body' in reg_resp.data)
-        # verification_url = reverse('email-verify')
-        # ver_resp = self.client.get(verification_url, headers=auth_headers, format='json')
-        # print(ver_resp.data)
-        # self.assertEqual(ver_resp.status_code, status.HTTP_200_OK)
-
-        # resp = self.client.post(verification_url, {'token': 'abc'}, format='json')
-        # self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue('token' in reg_resp.data)
+        self.assertTrue('uid' in reg_resp.data)
+        ver_resp = self.client.get(
+            f'/api/activate/{reg_resp.data.get("uid")}/{reg_resp.data.get("token")}',
+        )
+        self.assertEqual(ver_resp.status_code, status.HTTP_200_OK)
+        self.assertTrue(User.objects.get(username='user@foo.com').is_verified)
+        ver_resp = self.client.get(
+            '/api/activate/123/abc',
+        )
+        self.assertEqual(ver_resp.status_code, status.HTTP_403_FORBIDDEN)
 
         reset_url = reverse('request-reset-email')
         resp_reset = self.client.post(reset_url, {'email':'user@foo.com'}, format='json')
@@ -48,15 +49,12 @@ class UserLoginTestCase(APITestCase):
         resp_login = self.client.post(login_url, {'email':'user@foo.com', 'password':'pass123'}, format='json')
         self.assertEqual(resp_login.status_code, status.HTTP_403_FORBIDDEN)
         resp_login = self.client.post(login_url, {'email':'user@foo.com', 'password':'pass1234'}, format='json')
-        # auth_headers = {
-        #     'HTTP_AUTHORIZATION': resp_login.data.get("token"),
-        # }
+
         self.client.credentials(HTTP_AUTHORIZATION = resp_login.data.get("jwt"))
         self.assertEqual(resp_login.status_code, status.HTTP_200_OK)
         reset_known_url = reverse('password-reset-known')
         resp_reset_known = self.client.patch(
             reset_known_url,
-            # headers=auth_headers,
             data={
                 "old_password": "pass1234",
                 "new_password": "pass12345",

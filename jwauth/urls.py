@@ -23,7 +23,7 @@ urlpatterns = [
     path('logout/', LogoutView.as_view()),
     path('task/<int:pk>', TaskView.as_view(), name="taskpatch"),
     path('task', TaskPostView.as_view(), name="task"),
-    path('email-verify/', VerifyEmail.as_view(), name="email-verify"),
+    path('activate/<uidb64>/<token>', VerifyEmail.as_view(), name="email-verify"),
     path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('request-reset-email/', RequestPasswordReset.as_view(),
          name="request-reset-email"),

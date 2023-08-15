@@ -6,11 +6,11 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 
 
-class EmailVerificationSerializer(serializers.ModelSerializer):
-    token = serializers.CharField(max_length=555)
-    class Meta:
-        model = User
-        fields = ['token']
+# class EmailVerificationSerializer(serializers.ModelSerializer):
+#     token = serializers.CharField(max_length=555)
+#     class Meta:
+#         model = User
+#         fields = ['token']
 
 class TaskSerializer(serializers.ModelSerializer):
     class Meta:
